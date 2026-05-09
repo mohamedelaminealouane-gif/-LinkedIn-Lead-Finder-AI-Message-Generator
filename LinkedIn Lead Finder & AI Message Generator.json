@@ -1,0 +1,625 @@
+{
+  "updatedAt": "2026-04-27T20:20:41.000Z",
+  "createdAt": "2026-04-26T21:08:38.848Z",
+  "id": "uhJxzaDyEsjpOuGJ",
+  "name": "LinkedIn Messages",
+  "description": null,
+  "active": false,
+  "isArchived": false,
+  "nodes": [
+    {
+      "parameters": {
+        "chatId": "={{ $json.message.chat.id }}",
+        "text": "🔍 Searching LinkedIn profiles... \nPlease wait while I find leads matching your criteria.",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        0,
+        124
+      ],
+      "id": "d135fdb7-57c5-429c-94ab-6c5e1ab2dece",
+      "name": "Send a text message",
+      "webhookId": "59acef21-585d-47c5-82d5-0d9d1dfb8c09",
+      "credentials": {
+        "telegramApi": {
+          "id": "**********",
+          "name": "Telegram account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "={{ $('Telegram Trigger').item.json.message.text }}",
+        "options": {
+          "systemMessage": "You are a search query parser. Extract LinkedIn search parameters from the user's message.\n\nAlways translate to english regardless of the input language. use your intelligence to understand the intent of the user\nExtract and return ONLY a valid JSON object with these fields (use null for missing fields):\n{\n  \"searchQuery\": \"general search term if any\",\n  \"currentJobTitles\": [\"array of job titles\"] or null,\n  \"locations\": [\"array of locations\"] or null,\n  \"currentCompanies\": [\"array of company names\"] or null,\n  \"maxItems\": number between 5-25 (default 10),\n  \"isValid\": true or false\n}\nExamples:\n\n\"Find 15 CEOs in Dubai\" -> {\"currentJobTitles\": [\"CEO\"], \"locations\": [\"Dubai\"], \"maxItems\": 15, \"isValid\": true}\n\n\"Marketing managers at Google in London\" -> {\"currentJobTitles\": [\"Marketing Manager\"], \"locations\": [\"London\"], \"currentCompanies\": [\"google\"], \"maxItems\": 10, \"isValid\": true}\n\n\"Hello\" -> {\"isValid\": false}\n\nReturn ONLY the JSON, no explanation."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        224,
+        124
+      ],
+      "id": "3fe5fe89-40ac-4aca-97ff-b48b09d4e02a",
+      "name": "AI Agent"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4o-mini",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        296,
+        348
+      ],
+      "id": "f4edda0a-c73a-490a-8857-a2f0ba6c3574",
+      "name": "OpenRouter Chat Model",
+      "credentials": {
+        "openRouterApi": {
+          "id": "MrGInArp43WAKaxj",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "let responseText = '';\n\n// 1. Get the raw text from OpenAI\ntry {\n  const output = $json.output;\n  if (Array.isArray(output) && output[0]?.content?.[0]?.text) {\n    responseText = output[0].content[0].text;\n  } else {\n    responseText = $json.text || JSON.stringify($json);\n  }\n} catch (e) {\n  responseText = \"\";\n}\n\n// 2. Clean the string\nlet cleanJsonString = responseText.replace(/```json|```/g, \"\").trim();\n\n// 3. Parse and Fix Nesting\nlet parsed = {};\ntry {\n  let tempParsed = JSON.parse(cleanJsonString);\n  \n  // If the AI nested everything inside an \"output\" key, pull it out\n  if (tempParsed.output && typeof tempParsed.output === 'object') {\n    parsed = tempParsed.output;\n  } else if (typeof tempParsed.output === 'string') {\n    parsed = JSON.parse(tempParsed.output);\n  } else {\n    parsed = tempParsed;\n  }\n} catch (e) {\n  parsed = { isValid: false, error: 'Parsing failed' };\n}\n\n// 4. Get Telegram Data\nconst telegram = $('Telegram Trigger').item.json;\nconst chatId = telegram.message?.chat?.id || telegram.from?.id || '';\nconst userName = telegram.from?.first_name || 'User';\n\n// 5. Build Apify Body (Mapping fields correctly now)\nconst apifyBody = {\n  profileScraperMode: \"Full\",\n  maxItems: parsed.maxItems || 10,\n  searchQuery: parsed.searchQuery || \"\",\n  currentJobTitles: parsed.currentJobTitles || [],\n  locations: parsed.locations || [],\n  currentCompanies: parsed.currentCompanies || []\n};\n\n// 6. Return standard n8n format\nreturn [{\n  json: {\n    chat_id: chatId,\n    user_name: userName,\n    parsed_query: parsed,\n    is_valid: parsed.isValid === true || parsed.isValid === \"true\",\n    apify_body: apifyBody,\n    original_message: telegram.message?.text || \"\"\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        576,
+        124
+      ],
+      "id": "bd0ec077-85e2-4934-a94b-e7067f79a140",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "updates": [
+          "message"
+        ],
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.telegramTrigger",
+      "typeVersion": 1.2,
+      "position": [
+        -224,
+        124
+      ],
+      "id": "e34fa14e-60c8-451b-bbc6-e5895a517491",
+      "name": "Telegram Trigger",
+      "webhookId": "4064bff6-7c39-4d5b-ba44-c8b8d3570bee",
+      "credentials": {
+        "telegramApi": {
+          "id": "**********",
+          "name": "Telegram account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "d1e26057-bc77-4b0a-96aa-52b6137107db",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "or"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        800,
+        128
+      ],
+      "id": "3e75f138-e4d5-47a1-920a-7e95413d4ad8",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "❌ Invalid Request\n\n I couldn't understand your search query.\n Please try again with a format like: \n\n \"Find 10 CEOs in Dubai\" \n\n \"Marketing managers at tech companies in London\"\n\n \"20 founders in San Francisco\"\n\n Make sure to include:  \n\n ✅ Job title (CEO, Manager, etc.) \n\n ✅ Location (city or country) \n\n ✅ Optional: Company name, number of results",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1024,
+        220
+      ],
+      "id": "4aa5d7f8-ebbd-4d63-bd1b-da63d558be9a",
+      "name": "Send a text message1",
+      "webhookId": "106a34cc-25f9-4279-96a9-da95d516f77c",
+      "credentials": {
+        "telegramApi": {
+          "id": "**********",
+          "name": "Telegram account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "https://api.apify.com/v2/acts/harvestapi~linkedin-profile-search/run-sync-get-dataset-items?",
+        "sendHeaders": true,
+        "headerParameters": {
+          "parameters": [
+            {
+              "name": "Accept",
+              "value": "application/json"
+            },
+            {
+              "name": "Authorization",
+              "value": "Bearer*************"
+            }
+          ]
+        },
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={{ JSON.stringify($json.apify_body) }}",
+        "options": {
+          "redirect": {
+            "redirect": {}
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.4,
+      "position": [
+        1024,
+        28
+      ],
+      "id": "e5a4ae33-1695-4553-8dff-77800102899c",
+      "name": "HTTP Request"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Get all items from the input\nreturn $input.all().map(item => {\n  const profile = item.json;\n\n  const firstName = profile.firstName || '';\n  const lastName = profile.lastName || '';\n  const fullName = `${firstName} ${lastName}`.trim() || 'Unknown User';\n  const email = (profile.emails && profile.emails.length > 0) ? profile.emails[0] : 'N/A';\n  const connections = profile.connectionsCount || 0;\n  \n  // 1. Extract Company Name from currentPosition array\n  const currentRole = profile.currentPosition && profile.currentPosition[0] ? profile.currentPosition[0] : {};\n  const companyName = currentRole.companyName || 'N/A';\n\n  // Extract Metadata for Telegram\n  const chatId = $('Telegram Trigger').first().json.message?.chat?.id || \"\";\n  const userName = $('Telegram Trigger').first().json.message?.from?.first_name || \"User\";\n\n  // 2. Return the formatted object for EACH item including 'company'\n  return {\n    json: {\n      chat_id: chatId,\n      user_name: userName,\n      full_name: fullName,\n      email: email,\n      connections: connections,\n      company: companyName, // New field added here\n      job_title: profile.headline || 'N/A',\n      location: profile.location?.linkedinText || 'Global',\n      linkedin_url: profile.linkedinUrl,\n      is_valid: !!profile.publicIdentifier\n    }\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1248,
+        28
+      ],
+      "id": "09bce28f-6fd2-44a1-8575-7c30480e6f33",
+      "name": "Code in JavaScript1"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "9d72cb2c-2268-4932-96c6-cb7b349ef8c1",
+              "leftValue": "={{ $json.is_valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1472,
+        28
+      ],
+      "id": "6034cd86-6f47-4a99-8970-69480cfba6c1",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "No Results Found\n\nI couldn't find any LinkedIn profiles matching your criteria.\n\nTry:\n• Using broader job titles\n• Different locations\n• Removing company filters\n\nExample: \"Find 10 marketing managers in United States\"",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        1760,
+        176
+      ],
+      "id": "b6c9ebd8-55d0-470c-bd30-2d847e6d8492",
+      "name": "Send a text message2",
+      "webhookId": "106a34cc-25f9-4279-96a9-da95d516f77c",
+      "credentials": {
+        "telegramApi": {
+          "id": "********",
+          "name": "Telegram account 4"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "=\nHere is the text extracted from the image:\n\nYou are a sales expert at Upscale Flow AI. We build AI automation systems that help businesses increase revenue and cut operational costs by 30-50% through intelligent workflow automation.\n\nProfile to analyze:\n\nName:{{ $json.full_name }}\nRole:{{ $('Code in JavaScript').item.json.parsed_query.currentJobTitles[0] }}\nCompany: {{ $json.company }}\nLocation: {{ $json.location }}\nAbout: {{ $json.job_title }}\n\nSearch Context: {{ $('Telegram Trigger').item.json.message.text }}\n\n",
+        "options": {
+          "systemMessage": "Write a personalized LinkedIn connection request (max 300 characters) that:\n\nStarts with their name and references something specific from their profile\n\nPositions LamiAl  as helping companies like theirs automate operations and reduce costs\n\nMentions a specific outcome (e.g., \"helped similar companies save $15K/month\" or \"automate 60% of manual tasks\")\n\nEnds with a casual, non-salesy call-to-action\n\nTone: Warm, professional, consultative—NOT pushy or desperate"
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [
+        1696,
+        -224
+      ],
+      "id": "565e76dc-4727-4491-8c61-2bbf05d20606",
+      "name": "AI Agent1"
+    },
+    {
+      "parameters": {
+        "model": "openai/gpt-4o-mini",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenRouter",
+      "typeVersion": 1,
+      "position": [
+        1768,
+        0
+      ],
+      "id": "79368464-c523-4009-871d-add71c8d3f0b",
+      "name": "OpenRouter Chat Model1",
+      "credentials": {
+        "openRouterApi": {
+          "id": "**********",
+          "name": "OpenRouter account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "operation": "append",
+        "documentId": {
+          "__rl": true,
+          "value": "1Ayw_Fiyos0TP7_FdlTmnvtTzf-s93FtTZvyLcTBCvg8",
+          "mode": "list",
+          "cachedResultName": "Messages Linkedin",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Ayw_Fiyos0TP7_FdlTmnvtTzf-s93FtTZvyLcTBCvg8/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": "gid=0",
+          "mode": "list",
+          "cachedResultName": "Feuille 1",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/1Ayw_Fiyos0TP7_FdlTmnvtTzf-s93FtTZvyLcTBCvg8/edit#gid=0"
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "Name": "={{ $('Code in JavaScript1').item.json.full_name }}",
+            "HeadLine": "={{ $('Code in JavaScript').item.json.parsed_query.currentJobTitles[0] }}",
+            "Company ": "={{ $('Code in JavaScript1').item.json.company }}",
+            "Location": "={{ $('Code in JavaScript1').item.json.location }}",
+            "Linkedin_URL": "={{ $('Code in JavaScript1').item.json.linkedin_url }}",
+            "Personalized_Message ": "={{ $json.output }}"
+          },
+          "matchingColumns": [],
+          "schema": [
+            {
+              "id": "Name",
+              "displayName": "Name",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "HeadLine",
+              "displayName": "HeadLine",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Company ",
+              "displayName": "Company ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Location",
+              "displayName": "Location",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Linkedin_URL",
+              "displayName": "Linkedin_URL",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            },
+            {
+              "id": "Personalized_Message ",
+              "displayName": "Personalized_Message ",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ],
+          "attemptToConvertTypes": false,
+          "convertFieldsToString": false
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        2048,
+        -120
+      ],
+      "id": "314764e0-4751-4388-a1a8-aca99ce45a77",
+      "name": "Append row in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "*********",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "chatId": "={{ $('Telegram Trigger').item.json.message.chat.id }}",
+        "text": "={{ $json['Personalized_Message '] }}\n\n{{ $json.Linkedin_URL }}",
+        "additionalFields": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.telegram",
+      "typeVersion": 1.2,
+      "position": [
+        2272,
+        -120
+      ],
+      "id": "de4b80ae-d228-4d73-838a-55369ea47e99",
+      "name": "Send a text message3",
+      "webhookId": "106a34cc-25f9-4279-96a9-da95d516f77c",
+      "credentials": {
+        "telegramApi": {
+          "id": "**********",
+          "name": "Telegram account 4"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "Send a text message": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Telegram Trigger": {
+      "main": [
+        [
+          {
+            "node": "Send a text message",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "If",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Send a text message1": {
+      "main": [
+        []
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript1": {
+      "main": [
+        [
+          {
+            "node": "If1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If1": {
+      "main": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Send a text message2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenRouter Chat Model1": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent1",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent1": {
+      "main": [
+        [
+          {
+            "node": "Append row in sheet",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Append row in sheet": {
+      "main": [
+        [
+          {
+            "node": "Send a text message3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "staticData": null,
+  "meta": {
+    "templateCredsSetupCompleted": true
+  },
+  "pinData": {},
+  "versionId": "38469246-9843-4fd8-ae7d-0b97caa1e5fb",
+  "activeVersionId": null,
+  "versionCounter": 236,
+  "triggerCount": 0,
+  "tags": [],
+  "shared": [
+    {
+      "updatedAt": "2026-04-26T21:08:38.853Z",
+      "createdAt": "2026-04-26T21:08:38.853Z",
+      "role": "workflow:owner",
+      "workflowId": "uhJxzaDyEsjpOuGJ",
+      "projectId": "IfOklyXnCUD65DXr",
+      "project": {
+        "updatedAt": "2026-04-23T20:55:59.064Z",
+        "createdAt": "2026-04-01T19:58:22.751Z",
+        "id": "IfOklyXnCUD65DXr",
+        "name": "Mohamedalamin Alouane <mohamedalaminalouane@gmail.com>",
+        "type": "personal",
+        "icon": null,
+        "description": null,
+        "creatorId": "73815250-7a94-4f39-8be8-a352886e2148"
+      }
+    }
+  ],
+  "versionMetadata": {
+    "name": null,
+    "description": null
+  }
+}
